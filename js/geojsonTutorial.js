@@ -1,10 +1,8 @@
 //set up the map
-var mymap = L.map('mapid').setView([-105, 40], 13);
-
-L.tileLayer('https://{s}.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png', {
-	maxZoom: 20,
-	attribution: '&copy; Openstreetmap France | &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-}).addTo(mymap);
+var map = L.map('mapid').setView([40, -105], 4);
+L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
+	attribution: 'Tiles &copy; Esri &mdash; Source: Esri, DeLorme, NAVTEQ, USGS, Intermap, iPC, NRCAN, Esri Japan, METI, Esri China (Hong Kong), Esri (Thailand), TomTom, 2012'
+}).addTo(map);
 
 //create GeoJSON feature
 var geojsonFeature = {
@@ -19,10 +17,11 @@ var geojsonFeature = {
         "coordinates": [-104.99404, 39.75621]
     }
 };
-//add GeoJSON layer
+//create and add a GeoJSON layer
 L.geoJSON(geojsonFeature).addTo(map);
 
-//add another GeoJSON feature and change the style
+
+//add other GeoJSON objects and change the style
 var myLines = [{
     "type": "LineString",
     "coordinates": [[-100, 40], [-105, 45], [-110, 55]]
@@ -35,12 +34,12 @@ var myStyle = {
     "weight": 5,
     "opacity": 0.65
 };
-
 L.geoJSON(myLines, {
     style: myStyle
 }).addTo(map);
 
-//change the style with a function
+
+//pass a function that styles individual features
 var states = [{
     "type": "Feature",
     "properties": {"party": "Republican"},
@@ -68,7 +67,7 @@ var states = [{
         ]]
     }
 }];
-
+//color the states polygon with different styles based on their properties
 L.geoJSON(states, {
     style: function(feature) {
         switch (feature.properties.party) {
@@ -78,4 +77,56 @@ L.geoJSON(states, {
     }
 }).addTo(map);
 
-//
+//passing a pointToLayer function in GeoJSON object
+var geojsonMarkerOptions = {
+    radius: 8,
+    fillColor: "#ff7800",
+    color: "#000",
+    weight: 1,
+    opacity: 1,
+    fillOpacity: 0.8
+};
+
+//call onEachFeature function in a GeoJSON object
+function onEachFeature(feature, layer) {
+    // does this feature have a property named popupContent?
+    if (feature.properties && feature.properties.popupContent) {
+        layer.bindPopup(feature.properties.popupContent);
+    }
+}
+
+//call both functions in geojsonFeature
+L.geoJSON(geojsonFeature, {
+    pointToLayer: function (feature, latlng) {
+        return L.circleMarker(latlng, geojsonMarkerOptions);
+    }, onEachFeature: onEachFeature
+}).addTo(map);
+
+
+//filter option
+var someFeatures = [{
+    "type": "Feature",
+    "properties": {
+        "name": "Coors Field",
+        "show_on_map": true
+    },
+    "geometry": {
+        "type": "Point",
+        "coordinates": [-104.99404, 39.75621]
+    }
+}, {
+    "type": "Feature",
+    "properties": {
+        "name": "Busch Field",
+        "show_on_map": false
+    },
+    "geometry": {
+        "type": "Point",
+        "coordinates": [-104.98404, 39.74621]
+    }
+}];
+L.geoJSON(someFeatures, {
+    filter: function(feature, layer) {
+        return feature.properties.show_on_map;
+    }
+}).addTo(map);
