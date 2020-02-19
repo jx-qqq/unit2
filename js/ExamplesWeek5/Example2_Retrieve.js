@@ -49,36 +49,52 @@ function calcPropRadius(attValue) {
 };
 
 
+//function to convert markers to circle markers
+function pointToLayer(feature, latlng){
+    //Step 4: Determine which attribute to visualize with proportional symbols
+    var attribute = "2015–16";
+    //create marker options
+    var options = {
+        fillColor: "#ff7800",
+        color: "#000",
+        weight: 1,
+        opacity: 1,
+        fillOpacity: 0.8
+    };
+    //Step 5: For each feature, determine its value for the selected attribute
+    var attValue = feature.properties[attribute];
+    if (attValue) {
+      attValue = Number(attValue);
+    } else {
+      attValue = 0;
+    }
+    //Step 6: Give each feature's circle marker a radius based on its attribute value
+    options.radius = calcPropRadius(attValue);
+    //create circle marker layer
+    var layer = L.circleMarker(latlng, options);
+    //build popup content string
+    var popupContent = "<p><b>Region:</b> " + feature.properties["State/Union territory"];
+    //add formatted attribute to popup content string
+    var year1 = attribute.split("–")[0];
+    var year2 = "20" + attribute.split("–")[1];
+    popupContent += "<p><b>Gross State Domestic Product in " + year1 + " to " + year2 + ":</b> " + feature.properties[attribute] + " crores of Indian rupees.</p>";
+    //bind the popup to the circle marker
+    //Adding an offset to each circle marker
+    layer.bindPopup(popupContent, {
+      offset: new L.Point(0,-options.radius)
+    });
+    //return the circle marker to the L.geoJson pointToLayer option
+    return layer;
+};
+
+
 //Step 3: Add circle markers for point features to the map
 function createPropSymbols(data){
-     //Step 4: Determine which attribute to visualize with proportional symbols
-     var attribute = "2015–16";
-     //create marker options
-     var geojsonMarkerOptions = {
-          fillColor: "#ff7800",
-          color: "#fff",
-          weight: 1,
-          opacity: 1,
-          fillOpacity: 0.8,
-          radius: 8
-      };
       L.geoJson(data, {
-          pointToLayer : function (feature, latlng) {
-          //Step 5: For each feature, determine its value for the selected attribute
-          var attValue = feature.properties[attribute];
-          //if the value is missing, assign the number of 0
-          if (attValue) {
-            attValue = Number(attValue);
-          } else {
-            attValue = 0;
-          }
-          //Step 6: Give each feature's circle marker a radius based on its attribute value
-          geojsonMarkerOptions.radius = calcPropRadius(attValue);
-          //create circle markers
-          return L.circleMarker(latlng, geojsonMarkerOptions);
-          }
-     }).addTo(map);
+          pointToLayer : pointToLayer
+          }).addTo(map);
 };
+
 
 
 //Step 2: Import GeoJSON data
