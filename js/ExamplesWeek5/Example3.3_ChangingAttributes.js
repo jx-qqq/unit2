@@ -1,5 +1,3 @@
-/* Map of GeoJSON data from IndiaGSDP.geojson */
-//declare map var in global scope
 //declare vars globally so all functions have access
 var map;
 var minValue;

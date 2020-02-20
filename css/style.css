@@ -1,4 +1,41 @@
-#mapid { height: 800px; }
+#mapid {
+  height: 800px;
+  width: 80%;
+  display: inline-block;
+}
+
 .leaflet-popup-content p {
     margin: 0.2em 0;
+}
+
+
+#panel {
+    width: 30%;
+    padding: 100px;
+    display: inline-block;
+    vertical-align: top;
+    text-align: center;
+    line-height: 50px;
+}
+
+
+.range-slider {
+    width: 55%;
+}
+
+.step {
+	width: 15%;
+}
+
+.step img {
+	width: 70%;
+}
+
+
+#forward {
+    float: right;
+}
+
+#backward {
+    float: left;
 }
