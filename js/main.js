@@ -1,14 +1,16 @@
 /* Map of GeoJSON data from IndiaGSDP.geojson */
-//declare map var in global scope
+//Authored by Jianxiang Qiu, for Geog575
+
 //declare vars globally so all functions have access
-var map;
-var minValue;
+var map, attributes;
+var dataStats = {};
+var myTemporalLegend;
 
 //create map
 function createMap(){
      //create the map
      map = L.map('mapid', {
-          center: [20, 78],
+          center: [22, 78],
           zoom: 5
      });
      //add OSM base tilelayer
@@ -20,7 +22,30 @@ function createMap(){
 };
 
 
-//Build an attributes array from the data
+//Import GeoJSON data
+function getData(map){
+     //load the data
+     $.getJSON("data/IndiaGSDP.geojson", function(response){
+          //add title to the map
+          createTitle();
+
+          //create an attributes array
+          attributes = processData(response);
+          //calculate minimum data value
+          calcStats(response);
+          //call function to create proportional symbols
+          createPropSymbols(response, attributes);
+
+          //create attribute legend and the initial temporal legend
+          createAttributeLegend();
+          myTemporalLegend  = createTemporalLegend(attributes[0]);
+          //add sequence control
+          createSequenceControls(attributes);
+     });
+};
+
+
+//collect all the year info from the data
 function processData(data){
     //empty array to hold attributes
     var attributes = [];
@@ -39,7 +64,8 @@ function processData(data){
 };
 
 
-function calcMinValue(data){
+//calculate the mean, max and min in the dataStats
+function calcStats(data){
      //create empty array to store all data values
      var allValues = [];
      //loop through each city
@@ -48,25 +74,29 @@ function calcMinValue(data){
           for(var year = 11; year <= 19; year+=1){
                 //get population for current year
                var value = region.properties["20"+ String(year) + '–' + String(year+1)];
-               //add value that are not empty to the array
+               //add value that is not empty to the array
                if (value){
                  allValues.push(value);
                }
            }
      }
-     //get minimum value of our array
-     var minValue = Math.min(...allValues)
-     return minValue;
+     //get min, max, mean values of our array
+     dataStats.min = Math.min(...allValues);
+     dataStats.max = Math.max(...allValues);
+     //calculate mean
+     var sum = allValues.reduce(function(a, b){return a+b;});
+     dataStats.mean = sum/ allValues.length;
+     return dataStats;
 };
 
 
-//calculate the radius of each proportional symbol
-function calcPropRadius(attValue) {
-     //constant factor adjusts symbol sizes evenly
-     var minRadius = 1.5;
-     //Flannery Appearance Compensation formula
-     var radius = 1.0083 * Math.pow(attValue/minValue,0.5715) * minRadius
-     return radius;
+//Add circle markers for point features to the map
+function createPropSymbols(data, attributes){
+      L.geoJson(data, {
+                  pointToLayer: function(feature, latlng){
+                      return pointToLayer(feature, latlng, attributes);
+        }
+          }).addTo(map);
 };
 
 
@@ -94,14 +124,10 @@ function pointToLayer(feature, latlng, attributes){
     //create circle marker layer
     var layer = L.circleMarker(latlng, options);
     //build popup content string
-    var popupContent = "<p><b>Region:</b> " + feature.properties["State/Union territory"];
-    //add formatted attribute to popup content string
-    var year1 = attribute.split("–")[0];
-    var year2 = "20" + attribute.split("–")[1];
-    popupContent += "<p><b>Gross State Domestic Product in " + year1 + " to " + year2 + ":</b> " + feature.properties[attribute] + " crores of Indian rupees.</p>";
+    var popupContent = new PopupContent(feature.properties, attribute)
     //bind the popup to the circle marker
     //Adding an offset to each circle marker
-    layer.bindPopup(popupContent, {
+    layer.bindPopup(popupContent.formatted, {
       offset: new L.Point(0,-options.radius)
     });
     //return the circle marker to the L.geoJson pointToLayer option
@@ -109,76 +135,108 @@ function pointToLayer(feature, latlng, attributes){
 };
 
 
-//Add circle markers for point features to the map
-function createPropSymbols(data, attributes){
-      L.geoJson(data, {
-                  pointToLayer: function(feature, latlng){
-                      return pointToLayer(feature, latlng, attributes);
-        }
-          }).addTo(map);
+//calculate the radius of each proportional symbol
+function calcPropRadius(attValue) {
+     //constant factor adjusts symbol sizes evenly
+     var minRadius = 1.5;
+     //Flannery Appearance Compensation formula
+     var radius = 1.0083 * Math.pow(attValue/dataStats.min, 0.5715) * minRadius
+     return radius;
 };
 
+
+// object-oriented coding for popup content
+function PopupContent (properties, attribute){
+    this.properties = properties;
+    this.attribute = attribute;
+    this.year1 = attribute.split("–")[0];
+    this.year2 = "20" + attribute.split("–")[1];
+    this.gdp = this.properties[attribute];
+    //deal with no data
+    if (this.gdp != 0) {
+      this.formatted = "<p><b>Region:</b> " + this.properties["State/Union territory"] + "<p><b>Gross State Domestic Product in " + this.year1 + " to " + this.year2 + ":</b> " + this.gdp + " crores of Indian rupees.</p>";
+    } else {
+      this.formatted = "<p><b>Region:</b> " + this.properties["State/Union territory"] + "<p><b>Gross State Domestic Product in " + this.year1 + " to " + this.year2 + ":</b> " + " Record currently unavailable.</p>";
+    }
+};
 
 
 //Create new sequence controls
 function createSequenceControls(attributes){
-    //create range input element (slider)
-    $('#panel').append('<input class="range-slider" type="range">');
+    var SequenceControl = L.Control.extend({
+      options: {
+        position: "bottomleft"
+      },
+
+      onAdd: function(){
+        // create the control container div with a particular class name
+        var container = L.DomUtil.create('div', 'sequence-control-container');
+        //add explanations for the SequenceControl
+        content = 'Choose a year from 2011 to 2020'
+        $(container).append(content);
+        //create range input element (slider)
+        $(container).append('<input class="range-slider" type="range">');
+        //add skip buttons
+        $(container).append('<button class="step" id="backward" title="Backward">Backward</button>');
+        $(container).append('<button class="step" id="forward" title="Forward">Forward</button>');
+
+        //disable any mouse event listeners for the container (pan or zoom in the container area)
+        L.DomEvent.disableClickPropagation(container);
+        return container;
+      }
+    });
+    map.addControl(new SequenceControl());
+    //attach event listeners AFTER adding the controls
     //set slider attributes
     $('.range-slider').attr({
       max: 8,
       min: 0,
       value: 0,
       step: 1
-   });
-   $('#panel').append('<button class="step" id="backward">Backward</button>');
-   $('#panel').append('<button class="step" id="forward">Forward</button>');
-   //replace button content with images
-   $('#backward').html('<img src="img/backward.png">');
-   $('#forward').html('<img src="img/forward.png">');
-
-
-   //click listener for buttons
-    $('.step').click(function(){
-      //get the old index value
-      var index = $('.range-slider').val();
-
-      //Step 6: increment or decrement depending on button clicked
-      if ($(this).attr('id') == 'forward'){
-          index++;
-          //Make it a cycle: if past the last attribute, wrap around to first attribute
-          index = index > 8 ? 0 : index;
-      } else if ($(this).attr('id') == 'backward'){
-          index--;
-          //Make it a cycle: if past the first attribute, wrap around to last attribute
-          index = index < 0 ? 8 : index;
-      };
-      //update slider
-      $('.range-slider').val(index);
-      //Called in both step button and slider event listener handlers
-      //pass new attribute to update symbols
-      updatePropSymbols(attributes[index]);
     });
-
-    //input listener for slider
-    $('.range-slider').on('input', function(){
-        //get the new index value
-        var index = $(this).val();
+    $('#backward').html('<img src="img/backward.png">');
+    $('#forward').html('<img src="img/forward.png">');
+    //add an event listener that support the click on the step
+    $('.step').click(function(){
+        //get the old index value
+        var index = $('.range-slider').val();
+        //increment or decrement depending on button clicked
+        if ($(this).attr('id') == 'forward'){
+            index++;
+            //Make it a cycle: if past the last attribute, wrap around to first attribute
+            index = index > 8 ? 0 : index;
+        } else if ($(this).attr('id') == 'backward'){
+            index--;
+            //Make it a cycle: if past the first attribute, wrap around to last attribute
+            index = index < 0 ? 8 : index;
+        };
+        //update slider
+        $('.range-slider').val(index);
         //Called in both step button and slider event listener handlers
         //pass new attribute to update symbols
         updatePropSymbols(attributes[index]);
-    });
-};
+     });
+
+     //add an event listener that support the click on the slider
+     $('.range-slider').on('input', function(){
+         //get the new index value
+         var index = $(this).val();
+         //Called in both step button and slider event listener handlers
+         //pass new attribute to update symbols
+         updatePropSymbols(attributes[index]);
+     });
+}
 
 
 //Resize proportional symbols according to new attribute values
 function updatePropSymbols(attribute){
+    var att = attribute;
     map.eachLayer(function(layer){
         if (layer.feature && layer.feature.properties){
             //update the layer style and popup
             //access feature properties
-            //deal with no record of data
            var props = layer.feature.properties;
+           //deal with no record of data
            if (props[attribute]) {
              props[attribute] = Number(props[attribute]);
            } else {
@@ -189,39 +247,105 @@ function updatePropSymbols(attribute){
            layer.setRadius(radius);
 
            //add the region name to popup content string
-           var popupContent = "<p><b>Region:</b> " + props["State/Union territory"] + "</p>";
-
-           //add formatted attribute to panel content string
-           var year1 = attribute.split("–")[0];
-           var year2 = "20" + attribute.split("–")[1];
-           //deal with no record of data
-           if (props[attribute] != 0){
-             popupContent += "<p><b>Gross State Domestic Product in " + year1 + " to " + year2 + ":</b> " + props[attribute] + " crores of Indian rupees.</p>";
-           } else{
-             popupContent += "<p><b>Gross State Domestic Product in " + year1 + " to " + year2 + ":</b> " + "Record currently unavailable."
-           }
+           var popupContent = new PopupContent(props, att);
 
            //update popup content
            popup = layer.getPopup();
-           popup.setContent(popupContent).update();
+           popup.setContent(popupContent.formatted).update();
         };
     });
+    //remove the old temporal legend and add a new one
+    map.removeControl(myTemporalLegend);
+    myTemporalLegend = createTemporalLegend(att);
 };
 
 
-//Import GeoJSON data
-function getData(map){
-     //load the data
-     $.getJSON("data/IndiaGSDP.geojson", function(response){
-          //create an attributes array
-          var attributes = processData(response);
+//add attribute legend control
+function createAttributeLegend(){
+    var LegendControl = L.Control.extend({
+        options: {
+            position: 'bottomright'
+        },
+        onAdd: function () {
+            // create the control container with a particular class name
+            var container = L.DomUtil.create('div', 'attribute-control-container');
 
-          //calculate minimum data value
-          minValue = calcMinValue(response);
-          //call function to create proportional symbols
-          createPropSymbols(response, attributes);
-          createSequenceControls(attributes);
-     });
+            //start attribute legend svg string
+            var svg = '<svg id="attribute-legend" width="300px" height="150px">';
+            //array of circle names to base loop on
+            var circles = ["max", "mean", "min"];
+            // loop to add each circle and text to svg string
+            for (var i=0; i<circles.length; i++){
+              //assign the r and cy attributes
+              var radius = calcPropRadius(dataStats[circles[i]]);
+              var cy = 120 - radius;
+              //circle string
+              svg += '<circle class="legend-circle" id="' + circles[i] +
+              '" r=" '+ radius +' " cy="'+ cy +'" fill="#F47821" fill-opacity="0.8" stroke="#000000" cx="55"/>';
+              //evenly space out labels
+              var textY = i * 35 + 40;
+              //text string
+              svg += '<text id="' + circles[i] + '-text" x="112" y="' + textY + '">' + Math.round(dataStats[circles[i]]/1000)*1000 + " crores of Indian rupees" + '</text>';
+             };
+             //close svg string
+             svg += "</svg>";
+             //add attribute legend svg to container
+             $(container).append(svg);
+             //disable any mouse event listeners for the container (pan or zoom in the container area)
+             L.DomEvent.disableClickPropagation(container);
+             return container;
+        }
+    });
+    map.addControl(new LegendControl());
 };
+
+
+//add temporal legend control
+function createTemporalLegend(attribute){
+    var LegendControl = L.Control.extend({
+        options: {
+            position: 'bottomright'
+        },
+        onAdd: function () {
+            // create the control container with a particular class name
+            var container = L.DomUtil.create('div', 'legend-control-container');
+            //format the popup for temporal legend
+            popup = "<b>GDP of the year " + attribute.split("–")[0] + "-" + "20"+ attribute.split("–")[1] + " in States of India</b>";
+             //add temporal legend to container
+             $(container).append(popup);
+             //disable any mouse event listeners for the container (pan or zoom in the container area)
+             L.DomEvent.disableClickPropagation(container);
+             return container;
+        }
+    });
+    // give a name and return the LegendControl for the sake of update (removal)
+    myTemporalLegend = new LegendControl();
+    map.addControl(myTemporalLegend);
+    return myTemporalLegend;
+};
+
+//add title
+function createTitle(){
+    var LegendControl = L.Control.extend({
+        options: {
+            position: 'topright'
+        },
+        onAdd: function () {
+            // create the control container with a particular class name
+            var container = L.DomUtil.create('div', 'title-container');
+            //format the popup for title
+            title = "<p><b>GDP of the states in India 2011-2020</b></p>";
+            //add title to container
+            $(container).append(title);
+            author = "<p>by Jianxiang Qiu</p>";
+            $(container).append(author);
+            //disable any mouse event listeners for the container (pan or zoom in the container area)
+            L.DomEvent.disableClickPropagation(container);
+            return container;
+        }
+    });
+    map.addControl(new LegendControl());
+};
+
 
 $(document).ready(createMap);

@@ -3,6 +3,7 @@
 //declare vars globally so all functions have access
 var map;
 var dataStats = {};
+var myTemporalLegend;
 
 //create map
 function createMap(){
@@ -24,6 +25,8 @@ function createMap(){
 function getData(map){
      //load the data
      $.getJSON("data/IndiaGSDP.geojson", function(response){
+          //add title to the map
+          createTitle();
           //create an attributes array
           var attributes = processData(response);
 
@@ -31,9 +34,9 @@ function getData(map){
           calcStats(response);
           //call function to create proportional symbols
           createPropSymbols(response, attributes);
-          //create initial temporal legend
+          //create attribute legend and the initial temporal legend
           createAttributeLegend();
-          createTemporalLegend(attributes[0]);
+          myTemporalLegend  = createTemporalLegend(attributes[0]);
           createSequenceControls(attributes);
      });
 };
@@ -244,12 +247,13 @@ function updatePropSymbols(attribute){
            popup.setContent(popupContent.formatted).update();
         };
     });
-    //update the temporal legend
-    createTemporalLegend(att);
+    //remove the old temporal legend and add a new one
+    map.removeControl(myTemporalLegend);
+    myTemporalLegend = createTemporalLegend(att);
 };
 
 
-//add temporal legend control
+//add attribute legend control
 function createAttributeLegend(){
     var LegendControl = L.Control.extend({
         options: {
@@ -298,7 +302,8 @@ function createTemporalLegend(attribute){
         onAdd: function () {
             // create the control container with a particular class name
             var container = L.DomUtil.create('div', 'legend-control-container');
-            popup = "<b>GDP of the year " + attribute + ":</b>";
+            //format the popup for temporal legend
+            popup = "<b>GDP of the year " + attribute.split("–")[0] + "-" + "20"+ attribute.split("–")[1] + " in States of India</b>";
              //add temporal legend to container
              $(container).append(popup);
              //disable any mouse event listeners for the container (pan or zoom in the container area)
@@ -306,7 +311,34 @@ function createTemporalLegend(attribute){
              return container;
         }
     });
+    myTemporalLegend = new LegendControl();
+    map.addControl(myTemporalLegend);
+    return myTemporalLegend;
+};
+
+//add title
+function createTitle(){
+    var LegendControl = L.Control.extend({
+        options: {
+            position: 'topleft'
+        },
+        onAdd: function () {
+            // create the control container with a particular class name
+            var container = L.DomUtil.create('div', 'title-container');
+            //format the popup for title
+            title = "<p><b>GDP of the states in India 2011-2020</b></p>";
+            //add title to container
+            $(container).append(title);
+            title = "<p>by Jianxiang Qiu</p>";
+            //add title to container
+            $(container).append(title);
+            //disable any mouse event listeners for the container (pan or zoom in the container area)
+            L.DomEvent.disableClickPropagation(container);
+            return container;
+        }
+    });
     map.addControl(new LegendControl());
 };
+
 
 $(document).ready(createMap);
